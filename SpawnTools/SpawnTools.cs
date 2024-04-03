@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CounterStrikeSharp.API;
@@ -23,6 +23,10 @@ public class SpawnTools : BasePlugin
 
     private string _configPath = "";
 
+    private bool _wasHotReload = false;
+
+    private bool _isSpawnsCreated = false;
+
     private class CustomSpawnPoint
     {
         [JsonPropertyName("team")]
@@ -37,7 +41,11 @@ public class SpawnTools : BasePlugin
 
     public override void Load(bool hotReload)
     {
+        RegisterEventHandler<EventRoundStart>(OnRoundStart);
         RegisterListener<Listeners.OnMapStart>(OnMapStart);
+        _wasHotReload = hotReload;
+        if(hotReload)
+            OnMapStart(Server.MapName);
     }
 
     private static string VectorToString(Vector3 vec)
@@ -58,6 +66,8 @@ public class SpawnTools : BasePlugin
 
     private async void OnMapStart(string mapName)
     {
+        _isSpawnsCreated = false;
+        
         _spawnPoints.Clear();
         _configPath =
             Path.Combine(ModuleDirectory, $"../../configs/plugins/spawntools/{Server.MapName.ToLower()}.json");
@@ -81,27 +91,11 @@ public class SpawnTools : BasePlugin
             Console.WriteLine(e);
         }
 
-        var noVel = new Vector(0f, 0f, 0f);
-        var spawn = 0;
-        foreach (var spawnPoint in _spawnPoints)
+        if (_wasHotReload)
         {
-            SpawnPoint? entity;
-            if(spawnPoint.Team == CsTeam.Terrorist)
-                entity = Utilities.CreateEntityByName<CInfoPlayerTerrorist>("info_player_terrorist");
-            else
-                entity = Utilities.CreateEntityByName<CInfoPlayerCounterterrorist>("info_player_counterterrorist");
-            if (entity == null) continue;
-            var angel = StringToVector(spawnPoint.Angel);
-            entity.Teleport(
-                NormalVectorToValve(StringToVector(spawnPoint.Origin)),
-                new QAngle(angel.X, angel.Y, angel.Z),
-                noVel);
-            entity.DispatchSpawn();
-            spawn++;
+            OnRoundStart(null, null);
+            _wasHotReload = false;
         }
-
-        Logger.LogInformation(
-            $"Created a total of {spawn} out of {_spawnPoints.Count}");
     }
 
     [ConsoleCommand("css_addspawn", "Adds a new spawn point")]
@@ -153,5 +147,39 @@ public class SpawnTools : BasePlugin
         var jsonString = JsonSerializer.Serialize(_spawnPoints);
         File.WriteAllText(_configPath, jsonString);
         player.PrintToChat($" {ChatColors.LightRed}[SpawnTools]{ChatColors.Default} Added {(arg.Equals("ct") ? ChatColors.Blue : ChatColors.LightRed)}{arg}{ChatColors.Default} spawn point");
+    }
+
+    private HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
+    {
+        if (_isSpawnsCreated)
+        {
+            return HookResult.Continue;
+        }
+
+        Console.WriteLine($"Round started {_spawnPoints.Count}");
+        var noVel = new Vector(0f, 0f, 0f);
+        var spawn = 0;
+        foreach (var spawnPoint in _spawnPoints)
+        {
+            SpawnPoint? entity;
+            if(spawnPoint.Team == CsTeam.Terrorist)
+                entity = Utilities.CreateEntityByName<CInfoPlayerTerrorist>("info_player_terrorist");
+            else
+                entity = Utilities.CreateEntityByName<CInfoPlayerCounterterrorist>("info_player_counterterrorist");
+            if (entity == null) continue;
+            var angel = StringToVector(spawnPoint.Angel);
+            entity.Teleport(
+                NormalVectorToValve(StringToVector(spawnPoint.Origin)),
+                new QAngle(angel.X, angel.Y, angel.Z),
+                noVel);
+            entity.DispatchSpawn();
+            spawn++;
+        }
+
+        _isSpawnsCreated = true;
+
+        Logger.LogInformation(
+            $"Created a total of {spawn} out of {_spawnPoints.Count}");
+        return HookResult.Continue;
     }
 }
