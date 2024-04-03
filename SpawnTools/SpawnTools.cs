@@ -102,7 +102,6 @@ public class SpawnTools : BasePlugin
 
         Logger.LogInformation(
             $"Created a total of {spawn} out of {_spawnPoints.Count}");
-        return HookResult.Continue;
     }
 
     [ConsoleCommand("css_addspawn", "Adds a new spawn point")]
